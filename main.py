@@ -16,6 +16,7 @@ import json
 import base64
 
 import uuid
+import shutil
 
 def generate_uuid():
     return str(uuid.uuid4())
@@ -177,17 +178,39 @@ def new_job_to_factory(factory: str):
 
 @ui.page("/submit_to_factory/{job_uuid}")
 def submit_to_factory(job_uuid: str):
+
+    all_fields_ready = True
+
+    input_elems = {}
     # read the job_info.json file
     with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
         job_info = json.load(f)
-        if job_info['status'] != 'new':
+        if job_info['status'] == 'submitted':
             return ui.navigate.to("/")
         factory = job_info['factory']
         with open(f"factories/{factory}/desc.json", "r") as f:
             desc = json.load(f)
             ui.label(f"Factory: {desc['name']}").classes('text-2xl')
             ui.markdown(desc['upload_instructions'])
-            ui.upload(on_upload=lambda e: process_file(e, job_uuid)).classes('max-w-full')
+            fields = desc.get('fields', []) 
+            for field in fields:
+                if field['name'] not in job_info.get("fields", {}):
+                    all_fields_ready = False
+                
+                input_elems[field['name']] = ui.input(field['name'], placeholder=field['description'], value=job_info.get("fields", {}).get(field['name'], ""))
+            
+            def submit_job_fields():
+                job_info['fields'] = {}
+                for field in fields:
+                    job_info["fields"][field['name']] = input_elems[field['name']].value
+                job_info['status'] = 'fields_ready'
+                with open(f"jobs/{job_uuid}/job_info.json", "w") as f:
+                    json.dump(job_info, f)
+                ui.navigate.to(f"/submit_to_factory/{job_uuid}")
+
+            ui.button("Submit", on_click=submit_job_fields)
+            upload_elem = ui.upload(on_upload=lambda e: process_file(e, job_uuid)).classes('max-w-full').props(f"accept='{desc.get('accepted_file_types', '*')}'")
+            upload_elem.set_enabled(all_fields_ready)
 
     def process_file(e, job_uuid):
         print(e)
@@ -219,7 +242,7 @@ def show_jobs(factory: str):
                     with ui.card().classes("w-full"):
                         ui.label(f"Job ID: {job}").classes('text-xl')
                         ui.markdown(f"Status: {job_info['status']}")
-                        ui.button("View Job", on_click=lambda: ui.navigate.to(f"/show_job/{basename}"))
+                        ui.button("View Job", on_click=lambda basename=basename: ui.navigate.to(f"/show_job/{basename}"))
 
 @ui.page("/show_job/{job_uuid}")
 def show_job(job_uuid: str):
@@ -234,12 +257,24 @@ def show_job(job_uuid: str):
             job_info = json.load(f)
             ui.download(f"jobs/{job_uuid_2}/{job_info['file']}")
 
+    def delete_job(job_uuid_2):
+        print("deleting job", job_uuid_2)
+        # use ui.download to download the job
+        
+        shutil.rmtree(f"jobs/{job_uuid_2}")
+        ui.navigate.to("/")
+
     with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
         job_info = json.load(f)
         ui.label(f"Job ID: {job_uuid}").classes('text-2xl')
+        for field, value in job_info.get("fields", {}).items():
+            ui.label(f"{field}: {value}")
         ui.markdown(f"Status: {job_info['status']}")
 
-    ui.button("Download Job", on_click=lambda job_uuid=job_uuid: download_job(job_uuid))
+    if job_info['status'] == 'submitted':
+        ui.button("Download Job", on_click=lambda job_uuid=job_uuid: download_job(job_uuid))
+
+    ui.button("Delete Job", on_click=lambda job_uuid=job_uuid: delete_job(job_uuid))
 
 
 

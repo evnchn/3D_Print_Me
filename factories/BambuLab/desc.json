@@ -2,5 +2,33 @@
     "name": "3D Printer Bambu Lab",
     "description": "# Bambu Lab 3D Printer\n\nThis is a powerful 3D printer",
     "upload_instructions": "Build volume: 256x256x256mm\n\nFile format: .stl\n\nMaterial: PLA",
-    "cover_image": "img.jpg"
+    "cover_image": "img.jpg",
+    "fields": [
+        {
+            "name": "Material",
+            "type": "text",
+            "description": "Material used for printing"
+        },
+        {
+            "name": "Color",
+            "type": "text",
+            "description": "Color of the material"
+        },
+        {
+            "name": "Infill",
+            "type": "text",
+            "description": "Infill percentage"
+        },
+        {
+            "name": "Layer Height",
+            "type": "text",
+            "description": "Layer height in mm"
+        },
+        {
+            "name": "E-mail",
+            "type": "text",
+            "description": "E-mail address"
+        }
+    ],
+    "accepted_file_types": ".stl"
 }
