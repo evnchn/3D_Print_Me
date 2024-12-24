@@ -1,0 +1,6 @@
+{
+    "name": "3D Printer Raise3D",
+    "description": "# Raise3D 3D Printer\n\nThis is a large 3D printer",
+    "upload_instructions": "Build volume: 305x305x605mm\n\nFile format: .stl\n\nMaterial: PLA",
+    "cover_image": "raise.png"
+}

@@ -1,0 +1,6 @@
+{
+    "name": "3D Printer Bambu Lab",
+    "description": "# Bambu Lab 3D Printer\n\nThis is a powerful 3D printer",
+    "upload_instructions": "Build volume: 256x256x256mm\n\nFile format: .stl\n\nMaterial: PLA",
+    "cover_image": "img.jpg"
+}
