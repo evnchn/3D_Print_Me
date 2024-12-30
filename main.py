@@ -6,14 +6,17 @@ import base64
 import shutil
 from glob import glob
 import os
+import time
 
 # NiceGUI libraries
 from nicegui import ui, app
 from fastapi import Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # Our custom libraries
+from utils.unified_header import unified_header
 from utils.auth import hash_new_password, is_correct_password, serialize_bytes_to_str, deserialize_str_to_bytes
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
 from utils.patch_css import patch_markdown_font_size
@@ -66,28 +69,71 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(AuthMiddleware)
 
+class CreateUserResponseModel(BaseModel):
+    master_username: str
+    master_password: str
+    username: str
+    password: str
+
+# error types for the login page, wrong username or password, or username already exists
+class WrongCredentialsError(Exception):
+    pass
+
+class UsernameExistsError(Exception):
+    pass
+
+class NullUserFieldError(Exception):
+    pass
+
+def try_login_corelogic(response: CreateUserResponseModel) -> bool:
+    if not response.username or not response.password:
+        raise NullUserFieldError("Username or password cannot be empty")
+    
+    if passwords.get(response.master_username) == response.master_password:
+        if 'user_pw' not in app.storage.general:
+            app.storage.general['user_pw'] = {}
+
+        if response.username in app.storage.general['user_pw']:
+            raise UsernameExistsError("Username already exists")
+
+        is_admin = response.master_username in priviledged_users
+        salt, pw_hash = hash_new_password(response.password)
+        app.storage.general['user_pw'][response.username] = {'salt': serialize_bytes_to_str(salt), 'pw_hash': serialize_bytes_to_str(pw_hash), 'admin': is_admin}
+        app.storage.user.update({'username': response.username, 'authenticated': True})
+        return True
+    raise WrongCredentialsError("Wrong master username or password")
+
+@app.post("/api/create_user", responses={
+    400: {"description": "Bad Request", "content": {"application/json": {"example": {"detail": "Username or password cannot be empty"}}}},
+    401: {"description": "Unauthorized", "content": {"application/json": {"example": {"detail": "Wrong master username or password"}}}},
+    409: {"description": "Conflict", "content": {"application/json": {"example": {"detail": "Username already exists"}}}}
+})
+def create_user(response: CreateUserResponseModel):
+    try:
+        if try_login_corelogic(response):
+            return {"detail": "User created successfully"}
+    except NullUserFieldError as e:
+        return {"detail": str(e)}, 400
+    except WrongCredentialsError as e:
+        return {"detail": str(e)}, 401
+    except UsernameExistsError as e:
+        return {"detail": str(e)}, 409
+
+
 @ui.page('/login')
 def login():
-    def try_login() -> None:  # local function to avoid passing username and password as arguments
-        if passwords.get(master_username.value) == master_password.value:
-            # add the username and password to app.storage.general['user_pw'], if not exist create dict
-            if 'user_pw' not in app.storage.general:
-                app.storage.general['user_pw'] = {}
-
-            # check if the username already exists
-            if username.value in app.storage.general['user_pw']:
-                ui.notify('Username already exists', color='negative')
-                return
-            
-            # if the account was created with a master username-password set that is in the priviledged_users set, admin=True
-            is_admin = master_username.value in priviledged_users
-            # hash the password and store the salt and hash
-            salt, pw_hash = hash_new_password(password.value)
-            app.storage.general['user_pw'][username.value] = {'salt': serialize_bytes_to_str(salt), 'pw_hash': serialize_bytes_to_str(pw_hash), 'admin': is_admin}
-            app.storage.user.update({'username': username.value, 'authenticated': True})
-            ui.navigate.to("/")
-        else:
-            ui.notify('Wrong username or password', color='negative')
+    def try_create_user() -> None:
+        response = CreateUserResponseModel(
+            master_username=master_username.value,
+            master_password=master_password.value,
+            username=username.value,
+            password=password.value
+        )
+        try:
+            if try_login_corelogic(response):
+                ui.navigate.to("/")
+        except (WrongCredentialsError, UsernameExistsError, NullUserFieldError) as e:
+            ui.notify(str(e), color='negative')
 
     def try_login_2() -> None:  # local function to avoid passing username and password as arguments
         # first check if the username exists
@@ -107,19 +153,19 @@ def login():
     with ui.card().classes('absolute-center'):
         ui.label("Create a new account").classes('text-2xl')
         master_username = ui.input('Master Username').classes("w-full")
-        master_username.on('keydown.enter', try_login)
+        master_username.on('keydown.enter', try_create_user)
         master_password = ui.input('Master Password', password=True, password_toggle_button=True).classes("w-full")
-        master_password.on('keydown.enter', try_login)
+        master_password.on('keydown.enter', try_create_user)
         if DEBUGMODE:
             # populate the master username and password
             a_set_of_values = list(passwords.items())[0]
             master_username.value = a_set_of_values[0]
             master_password.value = a_set_of_values[1]
         username = ui.input('Username').classes("w-full")
-        username.on('keydown.enter', try_login)
+        username.on('keydown.enter', try_create_user)
         password = ui.input('Password', password=True, password_toggle_button=True).classes("w-full")
-        password.on('keydown.enter', try_login)
-        ui.button('Log in', on_click=try_login)
+        password.on('keydown.enter', try_create_user)
+        ui.button('Log in', on_click=try_create_user)
 
         ui.label("Login").classes('text-2xl')
         username_2 = ui.input('Username').classes("w-full")
@@ -130,7 +176,11 @@ def login():
 
 @ui.page('/')
 def main_page():
-    ui.label("Hello, world!").classes('text-2xl')
+    def logout() -> None:
+        app.storage.user.update({'authenticated': False})
+        ui.navigate.to("/login")
+    with unified_header("Main Page"):
+        ui.button("Logout", on_click=logout).classes("shrink-0")
     username = app.storage.user.get('username', 'not logged in?')
     ui.label(f"Logged in as {username}")
     is_admin = app.storage.general.get('user_pw', {}).get(username, {}).get('admin', False)
@@ -143,7 +193,11 @@ def main_page():
 @ui.page("/show_factories")
 def show_factories():
     patch_markdown_font_size()
-    ui.label("Factories").classes('text-2xl')
+    is_admin = app.storage.general.get('user_pw', {}).get(app.storage.user.get('username', ''), {}).get('admin', False)
+    with unified_header("Factories", "/"):
+        # if is admin, show a button to show all jobs across all factories
+        if is_admin:
+            ui.button("Show All Jobs", on_click=lambda: ui.navigate.to("/show_jobs/__all__"))
 
     def new_job_to_factory(factory):
         ui.navigate.to(f"/new_job_to_factory/{factory}")
@@ -163,7 +217,9 @@ def show_factories():
                     ui.markdown(desc['upload_instructions'])
                     ui.image(f"{factory}/{desc['cover_image']}").classes("w-full h-96").props("fit='contain' ratio=1")
                     ui.button("New Job", on_click=lambda factory=basename: new_job_to_factory(factory))
-                    ui.button("Show Jobs", on_click=lambda factory=basename: show_jobs_at_factory(factory))
+                    # show jobs button for admin only
+                    if is_admin:
+                        ui.button("Show Jobs", on_click=lambda factory=basename: show_jobs_at_factory(factory))
 
 @ui.page("/new_job_to_factory/{factory}")
 def new_job_to_factory(factory: str):
@@ -172,6 +228,10 @@ def new_job_to_factory(factory: str):
         return ui.navigate.to("/show_factories")
     if not os.path.exists(f"factories/{factory}/desc.json"):
         return ui.navigate.to("/show_factories")
+    
+    # assert username exists
+    if not app.storage.user.get('username', ''): # not logged in
+        return ui.navigate.to("/")
 
     # creates /jobs/{random UUID} folder
     # writes the job_info.json file
@@ -179,7 +239,7 @@ def new_job_to_factory(factory: str):
     my_uuid = generate_prefixed_uuid("job")
     os.makedirs(f"jobs/{my_uuid}")
     with open(f"jobs/{my_uuid}/job_info.json", "w") as f:
-        json.dump({'factory': factory, 'status': 'new'}, f)
+        json.dump({'factory': factory, 'status': 'new', '__timestamp__': int(time.time()), '__user__': app.storage.user.get('username', 'unknown')}, f)
 
     ui.navigate.to(f"/submit_to_factory/{my_uuid}")
 
@@ -193,6 +253,7 @@ def submit_to_factory(job_uuid: str):
         return ui.navigate.to("/")
 
     all_fields_ready = True
+    issues = []
 
     input_elems = {}
     # read the job_info.json file
@@ -203,25 +264,85 @@ def submit_to_factory(job_uuid: str):
         factory = job_info['factory']
         with open(f"factories/{factory}/desc.json", "r") as f:
             desc = json.load(f)
-            ui.label(f"Factory: {desc['name']}").classes('text-2xl')
+            with unified_header(f"Factory: {desc['name']}", "/show_factories"):
+                pass
+
+            # given the job UUID, show a random cat by https://robohash.org/{UUID}.png?set=set4&size=128x128
+            ui.image(f"https://robohash.org/{job_uuid}.png?set=set4&size=128x128").classes("w-32 h-32") # set=set4 is cats
+
             ui.markdown(desc['upload_instructions'])
             fields = desc.get('fields', []) 
             for field in fields:
+                # do some validation on some of the fields which the framework does NOT promise to do
+
+                # first of all, check if the field is present in the job_info
+                # then, it must be non-empty
+                # email is handle by the browser, and it is not obliged to provide a valid email
+                # so we need to validate it here
+
                 if field['name'] not in job_info.get("fields", {}):
                     all_fields_ready = False
-                
-                input_elems[field['name']] = ui.input(field['name'], placeholder=field['description'], value=job_info.get("fields", {}).get(field['name'], ""))
+                    if field.get('__default__', ""):
+                        issues.append(f"Field {field['name']} is missing. Click submit to use the default value")
+                    else:
+                        issues.append(f"Field {field['name']} is missing")
+
+                elif not job_info.get("fields", {}).get(field['name'], ""):
+                    all_fields_ready = False
+                    issues.append(f"Field {field['name']} is empty")
+
+                elif field.get('__format__', '') == 'email' and not "@" in job_info.get("fields", {}).get(field['name'], ""):
+                    all_fields_ready = False
+                    # add an issue only if the field is not empty
+                    if job_info.get("fields", {}).get(field['name'], ""):
+                        issues.append(f"Field {field['name']} is not a valid email")
+
+                """The JSON specifies special underscore-prefixed features for field validation:
+
+1. **`__limited_choice__`**: Defines a set of allowed values for a field, as well as **`__limited_choice_text__`** to provide a description for each value.
+2. [DEPRECATED] **`__lower_limit__` and `__upper_limit__`**: Establish numerical constraints for input ranges.
+3. **`__format__`**: Specifies the expected format for certain inputs. Valid values are only "email" as of now. 
+4. **`__default__`**: Provides a default value for a field.
+
+These features ensure valid and appropriate data entry for each field."""
+
+                name = field['name']
+                ui.label(name).classes('text-xl')
+                description = field['description']
+                ui.label(description)
+                default_value = field.get('__default__', "")
+                # if job_info already has a value for this field, use that
+                if name in job_info.get("fields", {}):
+                    default_value = job_info["fields"][name]
+                if '__limited_choice__' in field:
+                    options = field['__limited_choice__']
+                    if not default_value in options:
+                        default_value = "" # there is an issue, but fail silently
+                    if '__limited_choice_text__' in field:
+                        options = {options[i]: field['__limited_choice_text__'][i] for i in range(len(options))}
+                    print("Debugging options", options)
+                    input_elems[name] = ui.select(options=options, value=default_value).classes("w-full")
+                elif '__format__' in field and field['__format__'] == 'email':
+                    input_elems[name] = ui.input(value=default_value).props("type='email'").classes("w-full")
+                else:
+                    input_elems[name] = ui.input(value=default_value).classes("w-full")
             
             def submit_job_fields():
                 job_info['fields'] = {}
                 for field in fields:
                     job_info["fields"][field['name']] = input_elems[field['name']].value
-                job_info['status'] = 'fields_ready'
+                if all_fields_ready:
+                    job_info['status'] = 'fields_ready'
+                else:
+                    job_info['status'] = 'fields_incomplete'
                 with open(f"jobs/{job_uuid}/job_info.json", "w") as f:
                     json.dump(job_info, f)
                 ui.navigate.to(f"/submit_to_factory/{job_uuid}")
 
             ui.button("Submit", on_click=submit_job_fields)
+            # show the issues
+            for issue in issues:
+                ui.label(issue).classes('text-red-500')
             upload_elem = ui.upload(on_upload=lambda e: process_file(e, job_uuid)).classes('max-w-full').props(f"accept='{desc.get('accepted_file_types', '*')}'")
             upload_elem.set_enabled(all_fields_ready)
 
@@ -237,32 +358,51 @@ def submit_to_factory(job_uuid: str):
         with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
             job_info = json.load(f)
             job_info['status'] = 'submitted'
+            # bump the timestamp
+            job_info['__timestamp__'] = int(time.time())
             job_info['file'] = e.name
             with open(f"jobs/{job_uuid}/job_info.json", "w") as f:
                 json.dump(job_info, f)
 
         ui.navigate.to("/")
 
-@ui.page("/show_jobs/{factory}")
-def show_jobs(factory: str):
-    ui.label(f"Jobs at {factory}").classes('text-2xl')
-    with ui.column().classes("w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"):
+@ui.page("/show_jobs/{factory_uuid}")
+def show_jobs(factory_uuid: str):
+    # assert that the factory exists, allow "__all__" to show all jobs
+    if factory_uuid != "__all__":
+        if not match_prefixed_uuid("factory", factory_uuid):
+            return ui.navigate.to("/show_factories")
+        if not os.path.exists(f"factories/{factory_uuid}/desc.json"):
+            return ui.navigate.to("/show_factories")
+    
+    # this page is limited to admins
+    is_admin = app.storage.general.get('user_pw', {}).get(app.storage.user.get('username', ''), {}).get('admin', False)
+    if not is_admin:
+        return ui.navigate.to("/show_factories")
+    
+    def purge_jobs(status):
+        jobs = []
         for job in glob(f"jobs/*"):
-            basename = os.path.basename(job)
             with open(f"{job}/job_info.json", "r") as f:
                 job_info = json.load(f)
-                if job_info['factory'] == factory:
-                    with ui.card().classes("w-full"):
-                        ui.label(f"Job ID: {job}").classes('text-xl')
-                        ui.label(f"Status: {job_info['status']}")
-                        ui.button("View Job", on_click=lambda basename=basename: ui.navigate.to(f"/show_job/{basename}"))
+                if (factory_uuid == "__all__" or job_info['factory'] == factory_uuid) and job_info['status'] == status:
+                    jobs.append(job)
+        for job in jobs:
+            shutil.rmtree(job)
+        ui.navigate.to(f"/show_jobs/{factory_uuid}")
 
-@ui.page("/show_job/{job_uuid}")
-def show_job(job_uuid: str):
-    if not job_uuid:
-        return ui.navigate.to("/")
+    def purge_new_jobs():
+        purge_jobs('new')
 
-    print("viewing job", job_uuid)
+    def purge_incomplete_jobs():
+        purge_jobs('fields_incomplete')
+
+    def purge_finished_jobs():
+        purge_jobs('finished')
+
+    def purge_unfinished_jobs():
+        purge_jobs('unfinished')
+
     def download_job(job_uuid_2):
         print("downloading job", job_uuid_2)
         # use ui.download to download the job
@@ -275,20 +415,90 @@ def show_job(job_uuid: str):
         # use ui.download to download the job
         
         shutil.rmtree(f"jobs/{job_uuid_2}")
-        ui.navigate.to("/")
+        ui.navigate.reload()
 
-    with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
-        job_info = json.load(f)
-        ui.label(f"Job ID: {job_uuid}").classes('text-2xl')
-        for field, value in job_info.get("fields", {}).items():
-            ui.label(f"{field}: {value}")
-        ui.label(f"Status: {job_info['status']}")
+    def mark_as_finished(job_uuid_2):
+        with open(f"jobs/{job_uuid_2}/job_info.json", "r") as f:
+            job_info = json.load(f)
+            job_info['status'] = 'finished'
+            with open(f"jobs/{job_uuid_2}/job_info.json", "w") as f:
+                json.dump(job_info, f)
+        ui.navigate.reload()
 
-    if job_info['status'] == 'submitted':
-        ui.button("Download Job", on_click=lambda job_uuid=job_uuid: download_job(job_uuid))
+    def mark_as_unfinished(job_uuid_2):
+        with open(f"jobs/{job_uuid_2}/job_info.json", "r") as f:
+            job_info = json.load(f)
+            job_info['status'] = 'unfinished' # a special status only set by the admin
+            with open(f"jobs/{job_uuid_2}/job_info.json", "w") as f:
+                json.dump(job_info, f)
+        ui.navigate.reload()
 
-    ui.button("Delete Job", on_click=lambda job_uuid=job_uuid: delete_job(job_uuid))
+    with ui.dialog() as dialog_batch_delete, ui.card():
+        ui.button("Purge New Jobs (the empty jobs)", on_click=purge_new_jobs, color="red").classes("w-full")
+        ui.button("Purge Incomplete Jobs (may affect students!)", on_click=purge_incomplete_jobs, color="red").classes("w-full")
+        ui.button("Purge Finished Jobs (the old jobs)", on_click=purge_finished_jobs, color="red").classes("w-full")
+        ui.button("Purge Rejected Jobs (technician reject, student no response)", on_click=purge_unfinished_jobs, color="red").classes("w-full")
+    
+    if factory_uuid == "__all__":
+        with unified_header("Jobs at All Factories", "/show_factories"):
+            ui.button("Batch delete", on_click=dialog_batch_delete.open, color="red").classes("shrink-0")
+        # populate dict names_of_all_factories
+        names_of_all_factories = {}
+        for factory_file in glob("factories/*"):
+            with open(f"{factory_file}/desc.json", "r") as f:
+                desc = json.load(f)
+                names_of_all_factories[os.path.basename(factory_file)] = desc['name']
+    else:
+        with open(f"factories/{factory_uuid}/desc.json", "r") as f:
+            desc = json.load(f)
+            with unified_header(f"Jobs at {desc['name']}", "/show_factories"):
+                ui.button("Batch delete", on_click=dialog_batch_delete.open, color="red").classes("shrink-0")
 
 
 
-ui.run(storage_secret=SECRET_KEY)
+    with ui.column().classes("w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"):
+        jobs = []
+        for job in glob(f"jobs/*"):
+            with open(f"{job}/job_info.json", "r") as f:
+                job_info = json.load(f)
+                if factory_uuid == "__all__" or job_info['factory'] == factory_uuid:
+                    jobs.append((job, job_info))
+
+        print("jobs", jobs)
+
+        sorted_jobs = sorted(jobs, key=lambda x: x[1].get('__timestamp__', 0))
+
+        for job, job_info in sorted_jobs:
+            basename = os.path.basename(job)
+            with ui.card().classes("w-full"):
+                with ui.row().classes("w-full"):
+                    with ui.column().classes("flex-grow"):
+                        ui.label(f"Status: {job_info['status']}").classes('text-xl')
+                        ui.label(basename)
+                    # show a random cat, basename is the uuid
+                    ui.image(f"https://robohash.org/{basename}.png?set=set4&size=128x128").classes("w-16 h-16 shrink-0")
+
+                # if factory == "__all__", show the factory name
+                if factory_uuid == "__all__":
+                    ui.label(f"Factory: {names_of_all_factories[job_info['factory']]}")
+                ui.separator()
+                for field, value in job_info.get("fields", {}).items():
+                    ui.label(f"{field}: {value}")
+                ui.separator()
+                # ui.button("View Job", on_click=lambda basename=basename: ui.navigate.to(f"/show_job/{basename}"))
+                with ui.row().classes("w-full"):
+                    # BUTTON 1: Download
+                    ui.button("Download", on_click=lambda basename=basename: download_job(basename)).classes("flex-grow basis-0").set_enabled(job_info['status'] == 'submitted')
+
+                    # BUTTON 2: Delete
+                    ui.button("Delete", on_click=lambda basename=basename: delete_job(basename)).classes("flex-grow basis-0")
+
+                with ui.row().classes("w-full"):
+                    # BUTTON 3: Mark as Finished
+                    ui.button("Finish", on_click=lambda basename=basename: mark_as_finished(basename)).classes("flex-grow basis-0").set_enabled(job_info['status'] != 'finished')
+                    
+                    # BUTTON 4: Mark as Unfinished
+                    ui.button("Reject", on_click=lambda basename=basename: mark_as_unfinished(basename)).classes("flex-grow basis-0").set_enabled(job_info['status'] != 'unfinished')
+
+
+ui.run(storage_secret=SECRET_KEY, fastapi_docs=True)
