@@ -7,27 +7,78 @@
         {
             "name": "Material",
             "type": "text",
-            "description": "Material used for printing"
+            "description": "Material used for printing",
+            "__limited_choice__": [
+                "PLA",
+                "ABS",
+                "PETG",
+                "TPU"
+            ],
+            "__default__": "PLA"
         },
         {
             "name": "Color",
             "type": "text",
-            "description": "Color of the material"
+            "description": "Color of the material", 
+            "__limited_choice__": [
+                "Black",
+                "White",
+                "Red",
+                "Blue",
+                "Green",
+                "Yellow",
+                "Orange",
+                "Purple",
+                "Pink",
+                "Brown",
+                "Grey",
+                "Transparent"
+            ],
+            "__default__": "White"
         },
         {
             "name": "Infill",
             "type": "text",
-            "description": "Infill percentage"
+            "description": "Infill percentage",
+            "__limited_choice__": [
+                "15% (Default, for most parts)",
+                "25% (Strength preset, use layer height 0.2mm)",
+                "Custom (leave comment & provide reason)"
+            ],
+            "__default__": "15% (Default, for most parts)"
         },
         {
             "name": "Layer Height",
             "type": "text",
-            "description": "Layer height in mm"
+            "description": "Layer height in mm",
+            "__limited_choice__": [
+                "0.08",
+                "0.12",
+                "0.16",
+                "0.20",
+                "0.24",
+                "0.28"
+            ],
+            "__limited_choice_text__": [
+                "0.08 (Very Fine)",
+                "0.12 (Fine)",
+                "0.16 (Optimal)",
+                "0.20 (Standard / Strength)",
+                "0.24 (Draft)",
+                "0.28 (Extra Draft)"
+            ],
+            "__default__": "0.20"
         },
         {
             "name": "E-mail",
             "type": "text",
-            "description": "E-mail address"
+            "description": "E-mail address",
+            "__format__": "email"
+        },
+        {
+            "name": "Comments",
+            "type": "text",
+            "description": "Additional comments"
         }
     ],
     "accepted_file_types": ".stl"
