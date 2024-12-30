@@ -1,37 +1,35 @@
-# import os, load dotenv, get SECRET_KEY from .env
+# Core libraries
+import hashlib
+import hmac
+import json
+import base64
+import shutil
+from glob import glob
 import os
-from dotenv import load_dotenv
 
-from utils.uuid_handling import generate_uuid
-load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
-SECRET_KEY_BYTES = SECRET_KEY.encode()
-
-DEBUGMODE = int(os.getenv("DEBUGMODE", 0))
-
-from utils.auth import hash_new_password, is_correct_password, serialize_bytes_to_str, deserialize_str_to_bytes
-
-from utils.uuid_handling import generate_uuid, generate_prefixed_uuid, match_prefixed_uuid
-
-from utils.patch_css import patch_markdown_font_size
-
+# NiceGUI libraries
 from nicegui import ui, app
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-import hashlib
-import hmac
 
-import json
-import base64
+# Our custom libraries
+from utils.auth import hash_new_password, is_correct_password, serialize_bytes_to_str, deserialize_str_to_bytes
+from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
+from utils.patch_css import patch_markdown_font_size
 
-import shutil
+# Load the environment variables
+from dotenv import load_dotenv
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY_BYTES = SECRET_KEY.encode()
+DEBUGMODE = int(os.getenv("DEBUGMODE", 0))
 
-from glob import glob
-
+# Boot indication
 print("All imports successful")
 print("Debug mode:", DEBUGMODE)
 
+# Always use indentation in the storage files
 app.storage.general.indent = True
 app.storage.general.backup()
 for user_storage in app.storage._users.values():
@@ -144,11 +142,8 @@ def main_page():
 
 @ui.page("/show_factories")
 def show_factories():
+    patch_markdown_font_size()
     ui.label("Factories").classes('text-2xl')
-    ui.label("This page is restricted to authenticated users")
-
-    # list all the factories
-    ui.label("List of factories")
 
     def new_job_to_factory(factory):
         ui.navigate.to(f"/new_job_to_factory/{factory}")
@@ -190,6 +185,7 @@ def new_job_to_factory(factory: str):
 
 @ui.page("/submit_to_factory/{job_uuid}")
 def submit_to_factory(job_uuid: str):
+    patch_markdown_font_size()
     # assert that the job_uuid exists
     if not match_prefixed_uuid("job", job_uuid):
         return ui.navigate.to("/")
@@ -258,7 +254,7 @@ def show_jobs(factory: str):
                 if job_info['factory'] == factory:
                     with ui.card().classes("w-full"):
                         ui.label(f"Job ID: {job}").classes('text-xl')
-                        ui.markdown(f"Status: {job_info['status']}")
+                        ui.label(f"Status: {job_info['status']}")
                         ui.button("View Job", on_click=lambda basename=basename: ui.navigate.to(f"/show_job/{basename}"))
 
 @ui.page("/show_job/{job_uuid}")
@@ -286,7 +282,7 @@ def show_job(job_uuid: str):
         ui.label(f"Job ID: {job_uuid}").classes('text-2xl')
         for field, value in job_info.get("fields", {}).items():
             ui.label(f"{field}: {value}")
-        ui.markdown(f"Status: {job_info['status']}")
+        ui.label(f"Status: {job_info['status']}")
 
     if job_info['status'] == 'submitted':
         ui.button("Download Job", on_click=lambda job_uuid=job_uuid: download_job(job_uuid))
