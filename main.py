@@ -18,6 +18,7 @@ from logic.credentials_management import (
     UsernameExistsError,
     NullUserFieldError
 )
+from logic.jobs_management import new_job_corelogic
 from utils.security_definitions import passwords, AuthMiddleware
 from utils.unified_header import unified_header
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
@@ -27,6 +28,7 @@ from utils.patch_css import patch_markdown_font_size
 from api import api_userauth
 from api import sample_secure_endpoint
 from api import api_factory
+from api import api_job
 
 # Load the environment variables
 from dotenv import load_dotenv
@@ -164,25 +166,15 @@ def show_factories():
 
 @ui.page("/new_job_to_factory/{factory}")
 def new_job_to_factory(factory: str):
-    # assert that the factory exists
-    if not match_prefixed_uuid("factory", factory):
-        return ui.navigate.to("/show_factories")
-    if not os.path.exists(f"factories/{factory}/desc.json"):
-        return ui.navigate.to("/show_factories")
-    
-    # assert username exists
-    if not app.storage.user.get('username', ''): # not logged in
-        return ui.navigate.to("/")
-
-    # creates /jobs/{random UUID} folder
-    # writes the job_info.json file
-    # my_uuid = generate_uuid()
-    my_uuid = generate_prefixed_uuid("job")
-    os.makedirs(f"jobs/{my_uuid}")
-    with open(f"jobs/{my_uuid}/job_info.json", "w") as f:
-        json.dump({'factory': factory, 'status': 'new', '__timestamp__': int(time.time()), '__user__': app.storage.user.get('username', 'unknown')}, f)
-
-    ui.navigate.to(f"/submit_to_factory/{my_uuid}")
+    username = app.storage.user.get('username', '')
+    if not username:  # not logged in
+        ui.label("You need to be logged in to submit a job")
+    try:
+        job_uuid = new_job_corelogic(factory, username)
+        ui.navigate.to(f"/submit_to_factory/{job_uuid}")
+    except (ValueError, FileNotFoundError) as e:
+        ui.notify(str(e), color='negative')
+        ui.navigate.to("/show_factories")
 
 @ui.page("/submit_to_factory/{job_uuid}")
 def submit_to_factory(job_uuid: str):
