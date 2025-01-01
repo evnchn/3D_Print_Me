@@ -1,8 +1,5 @@
 # Core libraries
-import hashlib
-import hmac
 import json
-import base64
 import shutil
 from glob import glob
 import os
@@ -10,16 +7,25 @@ import time
 
 # NiceGUI libraries
 from nicegui import ui, app
-from fastapi import Request
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
-from starlette.middleware.base import BaseHTTPMiddleware
 
 # Our custom libraries
+from logic.credentials_management import (
+    create_user_corelogic,
+    check_credentials_corelogic,
+    CheckCredentialsResponseModel,
+    CreateUserResponseModel,
+    WrongCredentialsError,
+    UsernameExistsError,
+    NullUserFieldError
+)
+from utils.security_definitions import passwords, AuthMiddleware
 from utils.unified_header import unified_header
-from utils.auth import hash_new_password, is_correct_password, serialize_bytes_to_str, deserialize_str_to_bytes
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
 from utils.patch_css import patch_markdown_font_size
+
+# define API access routes
+from api import userauth
+from api import sample_secure_endpoint
 
 # Load the environment variables
 from dotenv import load_dotenv
@@ -50,78 +56,10 @@ for factory in glob("factories/*"):
         os.rename(factory, new_path)
 
 # in reality users passwords would obviously need to be hashed
-passwords = {'3dpm': '3dprintersarefun!', 'admin': 'topsecret'}
-priviledged_users = {'admin'}
-unrestricted_page_routes = {'/login', '/reauth'}
-
-
-class AuthMiddleware(BaseHTTPMiddleware):
-    """This middleware restricts access to all NiceGUI pages.
-
-    It redirects the user to the login page if they are not authenticated.
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        if not app.storage.user.get('authenticated', False):
-            if not request.url.path.startswith('/_nicegui') and request.url.path not in unrestricted_page_routes:
-                return RedirectResponse('/login')
-        return await call_next(request)
-
 app.add_middleware(AuthMiddleware)
 
-class CreateUserResponseModel(BaseModel):
-    master_username: str
-    master_password: str
-    username: str
-    password: str
-
-# error types for the login page, wrong username or password, or username already exists
-class WrongCredentialsError(Exception):
-    pass
-
-class UsernameExistsError(Exception):
-    pass
-
-class NullUserFieldError(Exception):
-    pass
-
-def try_login_corelogic(response: CreateUserResponseModel) -> bool:
-    if not response.username or not response.password:
-        raise NullUserFieldError("Username or password cannot be empty")
-    
-    if passwords.get(response.master_username) == response.master_password:
-        if 'user_pw' not in app.storage.general:
-            app.storage.general['user_pw'] = {}
-
-        if response.username in app.storage.general['user_pw']:
-            raise UsernameExistsError("Username already exists")
-
-        is_admin = response.master_username in priviledged_users
-        salt, pw_hash = hash_new_password(response.password)
-        app.storage.general['user_pw'][response.username] = {'salt': serialize_bytes_to_str(salt), 'pw_hash': serialize_bytes_to_str(pw_hash), 'admin': is_admin}
-        app.storage.user.update({'username': response.username, 'authenticated': True})
-        return True
-    raise WrongCredentialsError("Wrong master username or password")
-
-@app.post("/api/create_user", responses={
-    400: {"description": "Bad Request", "content": {"application/json": {"example": {"detail": "Username or password cannot be empty"}}}},
-    401: {"description": "Unauthorized", "content": {"application/json": {"example": {"detail": "Wrong master username or password"}}}},
-    409: {"description": "Conflict", "content": {"application/json": {"example": {"detail": "Username already exists"}}}}
-})
-def create_user(response: CreateUserResponseModel):
-    try:
-        if try_login_corelogic(response):
-            return {"detail": "User created successfully"}
-    except NullUserFieldError as e:
-        return {"detail": str(e)}, 400
-    except WrongCredentialsError as e:
-        return {"detail": str(e)}, 401
-    except UsernameExistsError as e:
-        return {"detail": str(e)}, 409
-
-
-@ui.page('/login')
-def login():
+@ui.page('/register')
+def register():
     def try_create_user() -> None:
         response = CreateUserResponseModel(
             master_username=master_username.value,
@@ -130,25 +68,10 @@ def login():
             password=password.value
         )
         try:
-            if try_login_corelogic(response):
+            if create_user_corelogic(response):
                 ui.navigate.to("/")
         except (WrongCredentialsError, UsernameExistsError, NullUserFieldError) as e:
             ui.notify(str(e), color='negative')
-
-    def try_login_2() -> None:  # local function to avoid passing username and password as arguments
-        # first check if the username exists
-        if not app.storage.general.get('user_pw', {}).get(username_2.value):
-            ui.notify('Wrong username or password', color='negative')
-        else:
-            # get the salt and hash from the storage
-            salt = deserialize_str_to_bytes(app.storage.general['user_pw'][username_2.value]['salt'])
-            pw_hash = deserialize_str_to_bytes(app.storage.general['user_pw'][username_2.value]['pw_hash'])
-            # check if the password is correct
-            if is_correct_password(salt, pw_hash, password_2.value):
-                app.storage.user.update({'username': username_2.value, 'authenticated': True})
-                ui.navigate.to("/")
-            else:
-                ui.notify('Wrong username or password', color='negative')
 
     with ui.card().classes('absolute-center'):
         ui.label("Create a new account").classes('text-2xl')
@@ -165,14 +88,31 @@ def login():
         username.on('keydown.enter', try_create_user)
         password = ui.input('Password', password=True, password_toggle_button=True).classes("w-full")
         password.on('keydown.enter', try_create_user)
-        ui.button('Log in', on_click=try_create_user)
+        ui.button('Register', on_click=try_create_user)
+        ui.link('Login', '/login')
 
+@ui.page('/login')
+def login():
+    def try_login() -> None:
+        response = CheckCredentialsResponseModel(
+            username=username_2.value,
+            password=password_2.value
+        )
+        try:
+            result = check_credentials_corelogic(response)
+            app.storage.user.update({'username': response.username, 'authenticated': True})
+            ui.navigate.to("/")
+        except (WrongCredentialsError, NullUserFieldError) as e:
+            ui.notify(str(e), color='negative')
+
+    with ui.card().classes('absolute-center'):
         ui.label("Login").classes('text-2xl')
         username_2 = ui.input('Username').classes("w-full")
-        username_2.on('keydown.enter', try_login_2)
+        username_2.on('keydown.enter', try_login)
         password_2 = ui.input('Password', password=True, password_toggle_button=True).classes("w-full")
-        password_2.on('keydown.enter', try_login_2)
-        ui.button('Log in', on_click=try_login_2)
+        password_2.on('keydown.enter', try_login)
+        ui.button('Log in', on_click=try_login)
+        ui.link('Register', '/register')
 
 @ui.page('/')
 def main_page():
