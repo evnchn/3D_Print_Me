@@ -74,4 +74,15 @@ def mark_job_status_corelogic(job_uuid_2, status):
         with open(f"jobs/{job_uuid_2}/job_info.json", "w") as f:
             json.dump(job_info, f)
     ui.navigate.reload()
+
+
+class UserNotOwnerError(Exception):
+    pass
+
+
+def raise_user_not_owner_error_corelogic(job_uuid: str, current_user: str):
+    with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
+        job_info = json.load(f)
+        if job_info.get('__user__', '') != current_user:
+            raise UserNotOwnerError("You are not the owner of this job")
         

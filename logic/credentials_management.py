@@ -101,6 +101,12 @@ def get_user_from_jwt_token(token: Annotated[str, Depends(oauth2_scheme)]) -> st
         return payload.get("sub")
     except jwt.JWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
+    
+def get_admin_user_from_jwt_token(current_user: Annotated[str, Depends(get_user_from_jwt_token)]) -> str:
+    if app.storage.general.get("user_pw", {}).get(current_user, {}).get("admin", False):
+        return current_user
+    raise HTTPException(status_code=401, detail="Not enough priviledges")   
+
 
 @app.post("/token")
 async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
