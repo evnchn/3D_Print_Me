@@ -19,6 +19,10 @@ from logic.credentials_management import (
     NullUserFieldError
 )
 from logic.jobs_management import new_job_corelogic
+from logic.jobs_management import fields_check_corelogic
+from logic.jobs_management import gather_job_corelogic
+from logic.jobs_management import purge_jobs_corelogic
+from logic.jobs_management import mark_job_status_corelogic
 from utils.security_definitions import passwords, AuthMiddleware
 from utils.unified_header import unified_header
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
@@ -205,31 +209,12 @@ def submit_to_factory(job_uuid: str):
 
             ui.markdown(desc['upload_instructions'])
             fields = desc.get('fields', []) 
+            
+            all_fields_ready, issues = fields_check_corelogic(job_uuid, fields)
+
             for field in fields:
-                # do some validation on some of the fields which the framework does NOT promise to do
 
-                # first of all, check if the field is present in the job_info
-                # then, it must be non-empty
-                # email is handle by the browser, and it is not obliged to provide a valid email
-                # so we need to validate it here
-
-                if field['name'] not in job_info.get("fields", {}):
-                    all_fields_ready = False
-                    if field.get('__default__', ""):
-                        issues.append(f"Field {field['name']} is missing. Click submit to use the default value")
-                    else:
-                        issues.append(f"Field {field['name']} is missing")
-
-                elif not job_info.get("fields", {}).get(field['name'], ""):
-                    all_fields_ready = False
-                    issues.append(f"Field {field['name']} is empty")
-
-                elif field.get('__format__', '') == 'email' and not "@" in job_info.get("fields", {}).get(field['name'], ""):
-                    all_fields_ready = False
-                    # add an issue only if the field is not empty
-                    if job_info.get("fields", {}).get(field['name'], ""):
-                        issues.append(f"Field {field['name']} is not a valid email")
-
+                        
                 """The JSON specifies special underscore-prefixed features for field validation:
 
 1. **`__limited_choice__`**: Defines a set of allowed values for a field, as well as **`__limited_choice_text__`** to provide a description for each value.
@@ -264,13 +249,14 @@ These features ensure valid and appropriate data entry for each field."""
                 job_info['fields'] = {}
                 for field in fields:
                     job_info["fields"][field['name']] = input_elems[field['name']].value
+                all_fields_ready, issues = fields_check_corelogic(job_uuid, fields)
                 if all_fields_ready:
                     job_info['status'] = 'fields_ready'
                 else:
                     job_info['status'] = 'fields_incomplete'
                 with open(f"jobs/{job_uuid}/job_info.json", "w") as f:
                     json.dump(job_info, f)
-                ui.navigate.to(f"/submit_to_factory/{job_uuid}")
+                ui.navigate.reload()
 
             ui.button("Submit", on_click=submit_job_fields)
             # show the issues
@@ -284,8 +270,11 @@ These features ensure valid and appropriate data entry for each field."""
         content = e.content
         print("Got file", content)
 
+        # establish safe name to prevent path traversal
+        safe_name = os.path.basename(e.name)
+
         # save the content to a file
-        with open(f"jobs/{job_uuid}/{e.name}", "wb") as f:
+        with open(os.path.join("jobs", job_uuid, safe_name), "wb") as f:
             f.write(content.read())
 
         with open(f"jobs/{job_uuid}/job_info.json", "r") as f:
@@ -293,7 +282,7 @@ These features ensure valid and appropriate data entry for each field."""
             job_info['status'] = 'submitted'
             # bump the timestamp
             job_info['__timestamp__'] = int(time.time())
-            job_info['file'] = e.name
+            job_info['file'] = safe_name
             with open(f"jobs/{job_uuid}/job_info.json", "w") as f:
                 json.dump(job_info, f)
 
@@ -313,28 +302,25 @@ def show_jobs(factory_uuid: str):
     if not is_admin:
         return ui.navigate.to("/show_factories")
     
-    def purge_jobs(status):
-        jobs = []
-        for job in glob(f"jobs/*"):
-            with open(f"{job}/job_info.json", "r") as f:
-                job_info = json.load(f)
-                if (factory_uuid == "__all__" or job_info['factory'] == factory_uuid) and job_info['status'] == status:
-                    jobs.append(job)
-        for job in jobs:
-            shutil.rmtree(job)
-        ui.navigate.to(f"/show_jobs/{factory_uuid}")
-
+    jobs = gather_job_corelogic(factory_uuid)
+    
     def purge_new_jobs():
-        purge_jobs('new')
+        purge_jobs_corelogic(factory_uuid, 'new')
 
     def purge_incomplete_jobs():
-        purge_jobs('fields_incomplete')
+        purge_jobs_corelogic(factory_uuid, 'fields_incomplete')
 
     def purge_finished_jobs():
-        purge_jobs('finished')
+        purge_jobs_corelogic(factory_uuid, 'finished')
 
     def purge_unfinished_jobs():
-        purge_jobs('unfinished')
+        purge_jobs_corelogic(factory_uuid, 'unfinished')
+
+    def mark_as_finished(job_uuid_2):
+        mark_job_status_corelogic(job_uuid_2, 'finished')
+
+    def mark_as_unfinished(job_uuid_2):
+        mark_job_status_corelogic(job_uuid_2, 'unfinished')
 
     def download_job(job_uuid_2):
         print("downloading job", job_uuid_2)
@@ -348,22 +334,6 @@ def show_jobs(factory_uuid: str):
         # use ui.download to download the job
         
         shutil.rmtree(f"jobs/{job_uuid_2}")
-        ui.navigate.reload()
-
-    def mark_as_finished(job_uuid_2):
-        with open(f"jobs/{job_uuid_2}/job_info.json", "r") as f:
-            job_info = json.load(f)
-            job_info['status'] = 'finished'
-            with open(f"jobs/{job_uuid_2}/job_info.json", "w") as f:
-                json.dump(job_info, f)
-        ui.navigate.reload()
-
-    def mark_as_unfinished(job_uuid_2):
-        with open(f"jobs/{job_uuid_2}/job_info.json", "r") as f:
-            job_info = json.load(f)
-            job_info['status'] = 'unfinished' # a special status only set by the admin
-            with open(f"jobs/{job_uuid_2}/job_info.json", "w") as f:
-                json.dump(job_info, f)
         ui.navigate.reload()
 
     with ui.dialog() as dialog_batch_delete, ui.card():
