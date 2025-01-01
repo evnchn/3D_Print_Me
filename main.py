@@ -24,8 +24,9 @@ from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
 from utils.patch_css import patch_markdown_font_size
 
 # define API access routes
-from api import userauth
+from api import api_userauth
 from api import sample_secure_endpoint
+from api import api_factory
 
 # Load the environment variables
 from dotenv import load_dotenv
@@ -48,12 +49,12 @@ for user_storage in app.storage._users.values():
 # assert that the factories folder exists, and that all subfolders are named with factory uuid
 if not os.path.exists("factories"):
     os.makedirs("factories")
-for factory in glob("factories/*"):
-    if not match_prefixed_uuid("factory", os.path.basename(factory)):
+for factory_scan in glob("factories/*"):
+    if not match_prefixed_uuid("factory", os.path.basename(factory_scan)):
         # rename the folder
-        print("Renaming", factory)
-        new_path = os.path.join(os.path.dirname(factory), generate_prefixed_uuid("factory"))
-        os.rename(factory, new_path)
+        print("Renaming", factory_scan)
+        new_path = os.path.join(os.path.dirname(factory_scan), generate_prefixed_uuid("factory"))
+        os.rename(factory_scan, new_path)
 
 # in reality users passwords would obviously need to be hashed
 app.add_middleware(AuthMiddleware)
