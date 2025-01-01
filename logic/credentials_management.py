@@ -95,19 +95,6 @@ class MalformedTokenError(Exception):
 class ExpiredTokenError(Exception):
     pass
 
-def check_token_corelogic(response: CheckTokenResponseModel) -> bool:
-    token = response.token
-    if not "api_tokens" in app.storage.general:
-        app.storage.general["api_tokens"] = {}
-        raise InvalidTokenError("Token is invalid")
-    if not match_prefixed_uuid("apitoken", token):
-        raise MalformedTokenError("Token format is invalid")
-    if token in app.storage.general["api_tokens"]:
-        if int(time.time()) - app.storage.general["api_tokens"][token]["__time__"] < 3600:
-            return True
-        raise ExpiredTokenError("Token has expired")
-    raise InvalidTokenError("Token is invalid")
-
 def get_user_from_jwt_token(token: Annotated[str, Depends(oauth2_scheme)]) -> str:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
