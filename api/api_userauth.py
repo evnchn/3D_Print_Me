@@ -26,7 +26,7 @@ def create_user(response: CreateUserResponseModel):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/userauth/check_credentials", responses={
+@app.post("/api/userauth/check_credentials", responses={
     200: {"description": "Credentials are correct", "content": {"application/json": {"example": {"detail": "Credentials are correct"}}}},
     400: {"description": "Bad Request", "content": {"application/json": {"example": {"detail": "Username or password cannot be empty"}}}},
     401: {"description": "Unauthorized", "content": {"application/json": {"example": {"detail": "Wrong username or password"}}}},

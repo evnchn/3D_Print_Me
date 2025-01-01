@@ -80,7 +80,7 @@ def check_credentials_corelogic(response: CheckCredentialsResponseModel):
     salt = deserialize_str_to_bytes(user_pw['salt'])
     pw_hash = deserialize_str_to_bytes(user_pw['pw_hash'])
     if is_correct_password(salt, pw_hash, response.password):
-        return {"detail": "Credentials are correct"}, 200
+        return {"detail": "Credentials are correct"}
     raise WrongCredentialsError("Wrong username or password")
 
 class CheckTokenResponseModel(BaseModel):
