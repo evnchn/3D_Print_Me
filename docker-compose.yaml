@@ -1,0 +1,14 @@
+services:
+  app:
+    image: 3d_print_me:latest  # Use the specified image
+    volumes:
+      - factories_data:/app/factories
+      - jobs_data:/app/jobs
+    ports:
+      - "9999:8080"  # Host port 9999 to container port 8080
+    environment:
+      - SECRET_KEY=helloworld  # Set your secret key here
+
+volumes:
+  factories_data:
+  jobs_data:
