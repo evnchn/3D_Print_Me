@@ -38,7 +38,6 @@ from api import api_job
 from dotenv import load_dotenv
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
-SECRET_KEY_BYTES = SECRET_KEY.encode()
 DEBUGMODE = int(os.getenv("DEBUGMODE", 0))
 
 # Boot indication

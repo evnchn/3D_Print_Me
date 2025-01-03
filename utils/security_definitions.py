@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 passwords = {'3dpm': '3dprintersarefun!', 'admin': 'topsecret'}
 priviledged_users = {'admin'}
-unrestricted_page_routes = {'/login', '/reauth'}
+unrestricted_page_routes = {'/login', '/reauth', '/register'}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
