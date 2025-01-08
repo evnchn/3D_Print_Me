@@ -2,7 +2,7 @@ from nicegui import app
 
 from fastapi import Depends, HTTPException
 from typing import Annotated
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import jwt
 
 from datetime import datetime, timedelta, timezone
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from auth_lib.credentials_management import CheckCredentialsResponseModel, NullUserFieldError, WrongCredentialsError, check_credentials_corelogic
 
-oauth2_scheme = OAuth2PasswordRequestForm(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 class CheckTokenResponseModel(BaseModel):
     token: str
