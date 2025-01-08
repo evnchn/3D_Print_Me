@@ -1,15 +1,9 @@
-from datetime import datetime, timedelta, timezone
-import time
-from typing import Annotated
-from fastapi import Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from nicegui import app
 
 from pydantic import BaseModel
 
 from auth_lib.security_definitions import priviledged_users, passwords
 from auth_lib.auth import deserialize_str_to_bytes, hash_new_password, is_correct_password, serialize_bytes_to_str
-from utils.uuid_handling import match_prefixed_uuid
 
 # error types for the login page, wrong username or password, or username already exists
 class WrongCredentialsError(Exception):
@@ -63,15 +57,3 @@ def check_credentials_corelogic(response: CheckCredentialsResponseModel):
     if is_correct_password(salt, pw_hash, response.password):
         return {"detail": "Credentials are correct"}
     raise WrongCredentialsError("Wrong username or password")
-
-class CheckTokenResponseModel(BaseModel):
-    token: str
-
-class InvalidTokenError(Exception):
-    pass
-
-class MalformedTokenError(Exception):
-    pass
-
-class ExpiredTokenError(Exception):
-    pass

@@ -1,23 +1,33 @@
-
+from nicegui import app
 
 from fastapi import Depends, HTTPException
 from typing import Annotated
 from fastapi.security import OAuth2PasswordRequestForm
 import jwt
 
-
 from datetime import datetime, timedelta, timezone
+
+from pydantic import BaseModel
 
 from auth_lib.credentials_management import CheckCredentialsResponseModel, NullUserFieldError, WrongCredentialsError, check_credentials_corelogic
 
-from nicegui import app
-
 oauth2_scheme = OAuth2PasswordRequestForm(tokenUrl="token")
+
+class CheckTokenResponseModel(BaseModel):
+    token: str
+
+class InvalidTokenError(Exception):
+    pass
+
+class MalformedTokenError(Exception):
+    pass
+
+class ExpiredTokenError(Exception):
+    pass
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
