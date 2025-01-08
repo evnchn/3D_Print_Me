@@ -41,6 +41,8 @@ from dotenv import load_dotenv
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUGMODE = int(os.getenv("DEBUGMODE", 0))
+CREATE_ACCOUNT_NORMAL_PW = os.getenv("CREATE_ACCOUNT_NORMAL_PW")
+CREATE_ACCOUNT_ADMIN_PW = os.getenv("CREATE_ACCOUNT_ADMIN_PW")
 
 # Boot indication
 print("All imports successful")
@@ -83,6 +85,10 @@ def register():
 
     with ui.card().classes('absolute-center'):
         ui.label("Create a new account").classes('text-2xl')
+        if not CREATE_ACCOUNT_NORMAL_PW:
+            ui.label("Warning: Normal password not set in environment variable CREATE_ACCOUNT_NORMAL_PW, making it impossible to create normal accounts").classes("text-red-500")
+        if not CREATE_ACCOUNT_ADMIN_PW:
+            ui.label("Warning: Admin password not set in environment variable CREATE_ACCOUNT_ADMIN_PW, making it impossible to create admin accounts").classes("text-red-500")
         master_username = ui.input('Master Username').classes("w-full")
         master_username.on('keydown.enter', try_create_user)
         master_password = ui.input('Master Password', password=True, password_toggle_button=True).classes("w-full")
