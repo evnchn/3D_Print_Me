@@ -16,7 +16,8 @@ from auth_lib.credentials_management import (
     CreateUserResponseModel,
     WrongCredentialsError,
     UsernameExistsError,
-    NullUserFieldError
+    NullUserFieldError,
+    InsecurePasswordError
 )
 import auth_lib.credentials_management # for defining API routes???
 from logic.jobs_management import new_job_corelogic
@@ -77,7 +78,7 @@ def register():
         try:
             if create_user_corelogic(response):
                 ui.navigate.to("/")
-        except (WrongCredentialsError, UsernameExistsError, NullUserFieldError) as e:
+        except (WrongCredentialsError, UsernameExistsError, NullUserFieldError, InsecurePasswordError) as e:
             ui.notify(str(e), color='negative')
 
     with ui.card().classes('absolute-center'):

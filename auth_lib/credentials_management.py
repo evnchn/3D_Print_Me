@@ -15,6 +15,9 @@ class UsernameExistsError(Exception):
 class NullUserFieldError(Exception):
     pass
 
+class InsecurePasswordError(Exception):
+    pass
+
 # pydantic models for the login page
 class CreateUserResponseModel(BaseModel):
     master_username: str
@@ -36,6 +39,20 @@ def create_user_corelogic(response: CreateUserResponseModel) -> bool:
 
         if response.username in app.storage.general['user_pw']:
             raise UsernameExistsError("Username already exists")
+        
+        if len(response.password) < 12:
+            raise InsecurePasswordError("Password too short")
+        # ensure that alpha, lower, upper, special, at least 3 out of 4
+        has_alpha = any(c.isalpha() for c in response.password)
+        has_lower = any(c.islower() for c in response.password)
+        has_upper = any(c.isupper() for c in response.password)
+        has_special = any(c in "!@#$%^&*()-+" for c in response.password)
+
+        if sum([has_alpha, has_lower, has_upper, has_special]) < 3:
+            raise InsecurePasswordError("Password must contain at least 3 of the following: alphabetic, lowercase, uppercase, special characters")
+        
+        if response.username.lower() in response.password.lower():
+            raise InsecurePasswordError("Password cannot contain username")
 
         is_admin = response.master_username in priviledged_users
         salt, pw_hash = hash_new_password(response.password)
