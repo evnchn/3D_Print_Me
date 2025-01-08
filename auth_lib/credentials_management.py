@@ -7,8 +7,8 @@ from nicegui import app
 
 from pydantic import BaseModel
 
-from utils.security_definitions import priviledged_users, passwords
-from utils.auth import deserialize_str_to_bytes, hash_new_password, is_correct_password, serialize_bytes_to_str
+from auth_lib.security_definitions import priviledged_users, passwords
+from auth_lib.auth import deserialize_str_to_bytes, hash_new_password, is_correct_password, serialize_bytes_to_str
 from utils.uuid_handling import match_prefixed_uuid
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-from logic.credentials_management import CheckCredentialsResponseModel, CreateUserResponseModel, NullUserFieldError, UsernameExistsError, WrongCredentialsError, check_credentials_corelogic, create_user_corelogic
+from auth_lib.credentials_management import CheckCredentialsResponseModel, CreateUserResponseModel, NullUserFieldError, UsernameExistsError, WrongCredentialsError, check_credentials_corelogic, create_user_corelogic
 
 @app.post("/api/userauth/create_user", responses={
     200: {"description": "User created successfully", "content": {"application/json": {"example": {"detail": "User created successfully"}}}},

@@ -9,7 +9,7 @@ import time
 from nicegui import ui, app
 
 # Our custom libraries
-from logic.credentials_management import (
+from auth_lib.credentials_management import (
     create_user_corelogic,
     check_credentials_corelogic,
     CheckCredentialsResponseModel,
@@ -23,7 +23,7 @@ from logic.jobs_management import fields_check_corelogic
 from logic.jobs_management import gather_job_corelogic
 from logic.jobs_management import purge_jobs_corelogic
 from logic.jobs_management import mark_job_status_corelogic
-from utils.security_definitions import passwords, AuthMiddleware
+from auth_lib.security_definitions import passwords, AuthMiddleware
 from unified_header_lib.unified_header import unified_header
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
 from utils.patch_css import patch_markdown_font_size
