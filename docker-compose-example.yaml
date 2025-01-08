@@ -7,6 +7,8 @@ services:
     ports:
       - "9999:8080"  # Host port 9999 to container port 8080
     environment:
+      - CREATE_ACCOUNT_NORMAL_PW=your_password_here  # Set your password here
+      - CREATE_ACCOUNT_ADMIN_PW=your_password_here  # Set your password here
       - SECRET_KEY=helloworld  # Set your secret key here
 
 volumes:
