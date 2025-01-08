@@ -24,7 +24,7 @@ from logic.jobs_management import gather_job_corelogic
 from logic.jobs_management import purge_jobs_corelogic
 from logic.jobs_management import mark_job_status_corelogic
 from utils.security_definitions import passwords, AuthMiddleware
-from utils.unified_header import unified_header
+from unified_header_lib.unified_header import unified_header
 from utils.uuid_handling import generate_prefixed_uuid, match_prefixed_uuid
 from utils.patch_css import patch_markdown_font_size
 
