@@ -18,6 +18,7 @@ from auth_lib.credentials_management import (
     UsernameExistsError,
     NullUserFieldError
 )
+import auth_lib.credentials_management # for defining API routes???
 from logic.jobs_management import new_job_corelogic
 from logic.jobs_management import fields_check_corelogic
 from logic.jobs_management import gather_job_corelogic
