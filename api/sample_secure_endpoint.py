@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends
 from nicegui import app
 
-from auth_lib.credentials_management_api import get_user_from_jwt_token
+from api.api_credentials_management import get_user_from_jwt_token
 
 @app.get("/user/me/")
 async def read_my_name(current_user: Annotated[str, Depends(get_user_from_jwt_token)]):

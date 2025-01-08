@@ -4,8 +4,8 @@ import shutil
 import time
 from nicegui import app
 from pydantic import BaseModel
-from auth_lib.credentials_management_api import get_admin_user_from_jwt_token
-from auth_lib.credentials_management_api import get_user_from_jwt_token
+from api.api_credentials_management import get_admin_user_from_jwt_token
+from api.api_credentials_management import get_user_from_jwt_token
 from logic.jobs_management import fields_check_corelogic, gather_job_corelogic, new_job_corelogic, mark_job_status_corelogic, purge_jobs_corelogic
 from fastapi import File, HTTPException, Depends, UploadFile
 from fastapi.responses import FileResponse
